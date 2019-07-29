@@ -131,7 +131,7 @@ main(int argc, char *argv[])
     char *cpwd = NULL; /* candidate password for comparison */
     slapdFrontendConfig_t *slapdFrontendConfig = NULL;
 
-    char *opts = "Hs:c:D:";
+    char *opts = "FHs:c:D:";
     name = argv[0];
     pwsp = cmppwsp = NULL;
 
@@ -139,10 +139,9 @@ main(int argc, char *argv[])
 
     /* Initialize NSS to make ds_salted_sha1_pw_enc() work */
     if (NSS_NoDB_Init(NULL) != SECSuccess) {
-        fprintf(stderr, "Fatal error: unable to initialize the NSS subcomponent.");
+        fprintf(stderr, "Fatal error: unable to initialize the NSS subcomponent.\n");
         return (1);
     }
-
 
     while ((i = getopt(argc, argv, opts)) != EOF) {
         switch (i) {
@@ -189,6 +188,15 @@ main(int argc, char *argv[])
                 }
             }
             heflag = 1;
+            break;
+
+        case 'F': /* fips */
+            if (!PK11_IsFIPS()) {
+                SECMODModule *internal = SECMOD_GetInternalModule();
+                fprintf(stderr, "Deleting internal module %s\n", internal->commonName);
+                SECMOD_DeleteInternalModule(internal->commonName);
+            }
+            fprintf(stderr, "FIPS: %s\n", PK11_IsFIPS() ? "yes" : "no"); 
             break;
 
         default:
