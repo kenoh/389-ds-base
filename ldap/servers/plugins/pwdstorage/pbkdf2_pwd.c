@@ -101,7 +101,9 @@ pbkdf2_sha256_hash(char *hash_out, size_t hash_out_len, SECItem *pwd, SECItem *s
 
     if (algid != NULL) {
         /* Gets the best slot that provides SHA256HMAC and PBKDF2 (may not be the default!) */
-        slot = PK11_GetBestSlotMultiple(mechanism_array, 2, NULL);
+        CK_FLAGS mech_flag = CKF_SIGN | CKF_ENCRYPT | CKF_DECRYPT | CKF_UNWRAP | CKF_WRAP;
+        //slot = PK11_GetInternalSlot();
+        slot = PK11_GetBestSlotMultipleWithAttributes(mechanism_array, NULL, NULL, 2, NULL);
         if (slot != NULL) {
             symkey = PK11_PBEKeyGen(slot, algid, pwd, PR_FALSE, NULL);
             PK11_FreeSlot(slot);
