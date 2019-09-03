@@ -94,18 +94,24 @@ pbkdf2_sha256_hash(char *hash_out, size_t hash_out_len, SECItem *pwd, SECItem *s
     SECItem *result = NULL;
     SECAlgorithmID *algid = NULL;
     PK11SlotInfo *slot = NULL;
+    PK11SymKey *key = NULL;
+    PK11SymKey *intermediary_key = NULL;
     PK11SymKey *symkey = NULL;
 
     /* We assume that NSS is already started. */
     algid = PK11_CreatePBEV2AlgorithmID(SEC_OID_PKCS5_PBKDF2, SEC_OID_HMAC_SHA256, SEC_OID_HMAC_SHA256, hash_out_len, iterations, salt);
 
     if (algid != NULL) {
-        /* Gets the best slot that provides SHA256HMAC and PBKDF2 (may not be the default!) */
-        CK_FLAGS mech_flag = CKF_SIGN | CKF_ENCRYPT | CKF_DECRYPT | CKF_UNWRAP | CKF_WRAP;
-        //slot = PK11_GetInternalSlot();
         slot = PK11_GetBestSlotMultipleWithAttributes(mechanism_array, NULL, NULL, 2, NULL);
         if (slot != NULL) {
-            symkey = PK11_PBEKeyGen(slot, algid, pwd, PR_FALSE, NULL);
+            key = PK11_PBEKeyGen(slot, algid, pwd, PR_FALSE, NULL);
+            SECItem param;
+            CK_KEY_DERIVATION_STRING_DATA string;
+            string.pData = "";
+            string.ulLen = 0;
+            param.data = (void *)&string;
+            param.len = sizeof(string);
+            symkey = PK11_Derive(key, CKM_CONCATENATE_BASE_AND_DATA, &param, CKM_EXTRACT_KEY_FROM_KEY, CKA_DERIVE, 0);
             PK11_FreeSlot(slot);
             if (symkey == NULL) {
                 /* We try to get the Error here but NSS has two or more error interfaces, and sometimes it uses none of them. */
