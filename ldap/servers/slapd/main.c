@@ -52,6 +52,7 @@ union semun
 #endif
 #include "slap.h"
 #include "slapi-plugin.h"
+#include "slapi-private.h"
 #include "prinit.h"
 #include "snmp_collator.h"
 #include "fe.h" /* client_auth_init() */
