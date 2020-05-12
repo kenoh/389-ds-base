@@ -97,7 +97,8 @@ pbkdf2_sha256_hash(char *hash_out, size_t hash_out_len, SECItem *pwd, SECItem *s
     PK11SymKey *symkey = NULL;
 
     /* We assume that NSS is already started. */
-    algid = PK11_CreatePBEV2AlgorithmID(SEC_OID_PKCS5_PBKDF2, SEC_OID_HMAC_SHA256, SEC_OID_HMAC_SHA256, hash_out_len, iterations, salt);
+    algid = PK11_CreatePBEV2AlgorithmID(SEC_OID_PKCS5_PBKDF2, SEC_OID_HMAC_SHA256, SEC_OID_HMAC_SHA256,
+                                        hash_out_len, iterations, salt);
 
     if (algid != NULL) {
         /* Gets the best slot that provides SHA256HMAC and PBKDF2 (may not be the default!) */
@@ -108,20 +109,67 @@ pbkdf2_sha256_hash(char *hash_out, size_t hash_out_len, SECItem *pwd, SECItem *s
             if (symkey == NULL) {
                 /* We try to get the Error here but NSS has two or more error interfaces, and sometimes it uses none of them. */
                 int32_t status = PORT_GetError();
-                slapi_log_err(SLAPI_LOG_ERR, (char *)schemeName, "Unable to retrieve symkey from NSS. Error code might be %d ???\n", status);
-                slapi_log_err(SLAPI_LOG_ERR, (char *)schemeName, "The most likely cause is your system has nss 3.21 or lower. PBKDF2 requires nss 3.22 or higher.\n");
+                slapi_log_err(SLAPI_LOG_ERR, (char *)schemeName,
+                              "Unable to retrieve symkey from NSS. Error code might be %d ???\n", status);
+                slapi_log_err(SLAPI_LOG_ERR, (char *)schemeName,
+                              "The most likely cause is your system has nss 3.21 or lower. PBKDF2 requires nss 3.22 or higher.\n");
                 return SECFailure;
             }
         } else {
             slapi_log_err(SLAPI_LOG_ERR, (char *)schemeName, "Unable to retrieve slot from NSS.\n");
             return SECFailure;
         }
-        SECOID_DestroyAlgorithmID(algid, PR_TRUE);
+        //SECOID_DestroyAlgorithmID(algid, PR_TRUE);
     } else {
         /* Uh oh! */
         slapi_log_err(SLAPI_LOG_ERR, (char *)schemeName, "Unable to generate algorithm ID.\n");
         return SECFailure;
     }
+    //--------------------------
+
+    do {
+        SECItem *cryptoParam = NULL;
+        PK11SymKey *symKey = NULL;
+        PK11Context *ctx = NULL;
+        CK_MECHANISM_TYPE cryptoMechType;
+        CK_ATTRIBUTE_TYPE operation = CKA_DECRYPT;
+        PK11SlotInfo *slot = NULL;
+
+        cryptoMechType = PK11_GetPBECryptoMechanism(&algid, &cryptoParam, pwd);
+        if (cryptoMechType == CKM_INVALID_MECHANISM) {
+            break;
+        }
+
+        slot = PK11_GetBestSlot(cryptoMechType, NULL);
+        if (!slot) {
+            break;
+        }
+
+        symKey = PK11_PBEKeyGen(slot, &algid, pwitem, PR_FALSE, pwdata);
+        if (symKey == NULL) {
+            break;
+        }
+
+        ctx = PK11_CreateContextBySymKey(cryptoMechType, operation, symkey, cryptoParam);
+        if (ctx == NULL) {
+            break;
+        }
+
+        rv = PK11_CipherOp(ctx,
+                           result->data,                  /* out     */
+                           (int *)(&result->len),         /* out len */
+                           hash_out_len,  /* max out */
+                           symkey.data,      /* in      */
+                           (int)symkey.len); /* in len  */
+
+        PR_ASSERT(derPKI->len == epki->encryptedData.len);
+        PR_ASSERT(rv == SECSuccess);
+        rv = PK11_Finalize(ctx);
+        PR_ASSERT(rv == SECSuccess);
+
+    } while (0);
+
+    //---------------------------
 
     if (PK11_ExtractKeyValue(symkey) == SECSuccess) {
         result = PK11_GetKeyData(symkey);
